@@ -16,29 +16,63 @@ mkdir -p "$LOG_DIR"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 LOG="$LOG_DIR/crawl-$STAMP.log"
 
-# Interpreter selection: $PYTHON wins, then a local .venv, then python3.
-if [ -n "${PYTHON:-}" ]; then
-    PY="$PYTHON"
-elif [ -x ".venv/bin/python" ]; then
-    PY=".venv/bin/python"
-else
-    PY="python3"
-fi
+DEPS="import requests, pandas, google_play_scraper, steamspypi"
+VENV="$PWD/.venv/bin/python"
+
+can_run() { "$1" -c "$DEPS" >/dev/null 2>&1; }
 
 say() { echo "$*" | tee -a "$LOG"; }
+
+explain_broken() {
+    # $1 = interpreter that cannot run the crawler
+    say "=== ERROR: $1 cannot run the crawler ==="
+    if ! "$1" -m pip --version >/dev/null 2>&1; then
+        say ""
+        say "This interpreter has no pip. On Debian/Ubuntu a venv is created"
+        say "without pip unless python3-venv is installed:"
+        say ""
+        say "  sudo apt update && sudo apt install -y python3-venv python3-pip"
+        say "  # Ubuntu 24.04+ : sudo apt install -y python3-venv python3-full"
+        say ""
+        say "  rm -rf .venv && python3 -m venv .venv"
+        say "  .venv/bin/pip install -r requirements.txt"
+        say ""
+        say "Fallback without a venv:  python3 -m pip install --user -r requirements.txt"
+        say "                          PYTHON=python3 ./run_crawl.sh"
+    else
+        say ""
+        say "pip works but the dependencies are missing:"
+        say ""
+        say "  $1 -m pip install -r requirements.txt"
+    fi
+    say ""
+    say "To use another interpreter:  PYTHON=/path/to/python ./run_crawl.sh"
+    exit 3
+}
+
+# Interpreter selection: an explicit $PYTHON always wins, then the first
+# candidate that can actually import the dependencies.
+if [ -n "${PYTHON:-}" ]; then
+    PY="$PYTHON"
+    can_run "$PY" || explain_broken "$PY"
+elif [ -x "$VENV" ] && can_run "$VENV"; then
+    PY="$VENV"
+elif can_run "python3"; then
+    PY="python3"
+    if [ -x "$VENV" ]; then
+        say "=== note: .venv/bin/python cannot import the dependencies, using python3 ==="
+    fi
+elif [ -x "$VENV" ]; then
+    PY="$VENV"
+    explain_broken "$PY"
+else
+    PY="python3"
+    explain_broken "$PY"
+fi
 
 say "=== started $(date -Is) ==="
 say "=== interpreter: $PY ($("$PY" -V 2>&1)) ==="
 say "=== command: $PY -u crawl.py $* ==="
-
-# Fail fast with an actionable message rather than a bare traceback.
-if ! "$PY" -c "import requests, pandas, google_play_scraper, steamspypi" 2>>"$LOG"; then
-    say "=== ERROR: dependencies are missing for $PY ==="
-    say "  Install them:      $PY -m pip install -r requirements.txt"
-    say "  Or pick another:   PYTHON=/path/to/python ./run_crawl.sh"
-    say "  If .venv is stale: rm -rf .venv && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
-    exit 3
-fi
 
 "$PY" -u crawl.py "$@" >>"$LOG" 2>&1
 status=$?

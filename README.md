@@ -62,11 +62,24 @@ Outputs:
 
 ## Running unattended with `screen`
 
+**Ubuntu/Debian first** — `python3 -m venv` produces a venv *without* `pip`
+unless this package is present (it provides `ensurepip`):
+
+```bash
+sudo apt update && sudo apt install -y python3-venv python3-pip
+# Ubuntu 24.04+ : sudo apt install -y python3-venv python3-full
+```
+
+Symptom if you skip it: `.venv/bin/python3: No module named pip`.
+
+Then:
+
 ```bash
 cd ~/card_game_data
 python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt     # install INTO .venv
-ls .venv/bin/python                            # confirm it exists
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python -c "import requests, pandas, google_play_scraper, steamspypi; print('deps ok')"
 
 screen -S crawl                                 # start a named session
 ./run_crawl.sh --steam-enrich-limit 2000 --steam-budget 0
@@ -100,11 +113,19 @@ Exit codes: `0` ok, `2` analysis failed, `3` wrong interpreter / missing
 dependencies, `130` interrupted (data is still valid — just re-run).
 
 The script picks its interpreter in this order: `$PYTHON`, then `.venv/bin/python`,
-then `python3`. If the venv exists but is empty, you get exit `3` with the fix
-suggested. Force a specific one with:
+then `python3` — skipping any candidate that cannot import the dependencies. If
+none work it prints the exact apt/pip commands to fix it (exit `3`). Force a
+specific one with:
 
 ```bash
 PYTHON=/opt/venv/bin/python ./run_crawl.sh
+```
+
+No venv at all also works if you prefer a user-level install:
+
+```bash
+python3 -m pip install --user -r requirements.txt
+PYTHON=python3 ./run_crawl.sh
 ```
 
 Notes:

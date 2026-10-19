@@ -1,6 +1,12 @@
 __pycache__/
 *.py[cod]
 
+# Virtual environments (never commit; recreate with `python3 -m venv .venv`).
+.venv/
+venv/
+env/
+ENV/
+
 # Crawled data stays local: it is large (38 MB+), changes on every crawl and
 # the HTTP cache is regenerable. Re-create it with `python crawl.py`.
 data/
