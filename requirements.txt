@@ -1,7 +1,12 @@
+# Core runtime dependencies.
+#
+# app-store-scraper is deliberately NOT listed here: version 0.3.5 pins
+# requests==2.23.0 exactly, which cannot co-exist with the modern requests this
+# project requires. The App Store crawler works without it by calling Apple's
+# iTunes Search API and the userReviewsRow endpoint directly. See
+# requirements-optional.txt if you still want the library installed.
 google-play-scraper>=1.2.7
-app-store-scraper>=0.3.5
 steamspypi>=1.1.1
 pandas>=2.0
 requests>=2.31
-tqdm>=4.66
 tabulate>=0.9

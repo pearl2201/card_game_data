@@ -38,6 +38,7 @@ class CrawlOptions:
     itunes_limit: int = DEFAULT_ITUNES_LIMIT
     reviews_per_game: int = DEFAULT_REVIEWS_PER_GAME
     review_games_limit: int = 80
+    checkpoint_every: int = 25
     require_multiplayer: bool = False
     min_relevance: dict[str, float] = field(default_factory=lambda: dict(MIN_RELEVANCE))
     refresh: bool = False
@@ -59,6 +60,24 @@ class Crawler:
                 self.app_store.http.refresh = True
         self.new_records = 0
         self.new_reviews = 0
+        self._unsaved = 0
+
+    def _upsert(self, record: dict) -> None:
+        self.store.upsert(record)
+        self._unsaved += 1
+
+    def _checkpoint(self, index: int) -> None:
+        """Persist progress so a kill/reboot does not lose the whole run."""
+        interval = self.options.checkpoint_every
+        if interval <= 0 or not self._unsaved:
+            return
+        if index % interval:
+            return
+        if self.options.dry_run:
+            return
+        total = self.store.save()
+        self._unsaved = 0
+        print(f"    [checkpoint] {total:,} games saved", flush=True)
 
     # -- public ------------------------------------------------------------
     def run(self) -> dict:
@@ -70,19 +89,22 @@ class Crawler:
             reviews_path = Path(tempfile.gettempdir()) / "cardgame_market_dryrun_reviews.jsonl"
             reviews_path.unlink(missing_ok=True)
 
-        with ReviewStore(reviews_path) as review_store:
-            if self.steam:
-                self._crawl_steam(review_store)
-            if self.play:
-                self._crawl_play(review_store)
-            if self.app_store:
-                self._crawl_app_store(review_store)
+        try:
+            with ReviewStore(reviews_path) as review_store:
+                if self.steam:
+                    self._crawl_steam(review_store)
+                if self.play:
+                    self._crawl_play(review_store)
+                if self.app_store:
+                    self._crawl_app_store(review_store)
 
-        self._apply_filters()
-        if not self.options.dry_run:
-            total = self.store.save()
-            print(f"\nSaved {total:,} games -> {GAMES_STORE}")
-            print(f"Added {self.new_reviews:,} review samples -> {REVIEWS_STORE}")
+            self._apply_filters()
+        finally:
+            # Always persist what we have, including on Ctrl+C / SIGTERM.
+            if not self.options.dry_run:
+                total = self.store.save()
+                print(f"\nSaved {total:,} games -> {GAMES_STORE}", flush=True)
+                print(f"Added {self.new_reviews:,} review samples -> {REVIEWS_STORE}", flush=True)
         return {
             "games": len(self.store),
             "new_games": self.new_records,
@@ -126,7 +148,7 @@ class Crawler:
                 records.append(existing)
                 continue
             record = self.steam.base_record(appid, entry)
-            self.store.upsert(record)
+            self._upsert(record)
             self.new_records += 1
             records.append(record)
 
@@ -174,7 +196,8 @@ class Crawler:
                 for review in reviews
             ]
             self.new_reviews += review_store.add_many(samples)
-            self.store.upsert(record)
+            self._upsert(record)
+            self._checkpoint(index)
 
     # -- google play -------------------------------------------------------
     def _crawl_play(self, review_store: ReviewStore) -> None:
@@ -204,9 +227,10 @@ class Crawler:
                 if _is_non_game(detail.get("genre")):
                     continue
                 record = self.play.build_record(app_id, detail, queries)
-                self.store.upsert(record)
+                self._upsert(record)
                 records.append(record)
                 self.new_records += 1
+                self._checkpoint(index)
 
         top = sorted(
             records,
@@ -219,7 +243,8 @@ class Crawler:
             reviews = self.play.fetch_reviews(record["source_id"], count=self.options.reviews_per_game)
             self.play.attach_review_summary(record, reviews)
             self.new_reviews += review_store.add_many(reviews)
-            self.store.upsert(record)
+            self._upsert(record)
+            self._checkpoint(index)
 
     # -- app store ---------------------------------------------------------
     def _crawl_app_store(self, review_store: ReviewStore) -> None:
@@ -235,7 +260,7 @@ class Crawler:
                 records.append(existing)
                 continue
             record = self.app_store.build_record(app_id, entry)
-            self.store.upsert(record)
+            self._upsert(record)
             records.append(record)
             self.new_records += 1
 
@@ -260,7 +285,8 @@ class Crawler:
                 record, reviews = future.result()
                 self.app_store.attach_review_summary(record, reviews)
                 self.new_reviews += review_store.add_many(reviews)
-                self.store.upsert(record)
+                self._upsert(record)
+                self._checkpoint(index)
 
     # -- filters -----------------------------------------------------------
     def _apply_filters(self) -> None:

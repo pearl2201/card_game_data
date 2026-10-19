@@ -9,7 +9,17 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from app_store_scraper import AppStore
+try:
+    # Optional: app-store-scraper 0.3.5 pins requests==2.23.0 exactly, which is
+    # incompatible with the modern requests this project needs. It is also
+    # currently broken upstream (Apple removed the page token it scrapes), so
+    # the direct UGC endpoint below is the primary review source.
+    from app_store_scraper import AppStore
+
+    _LIB_AVAILABLE = True
+except ImportError:
+    AppStore = None  # type: ignore[assignment]
+    _LIB_AVAILABLE = False
 
 from ..config import APPLE_COUNTRY, DEFAULT_ITUNES_LIMIT
 from ..http import ResilientSession
@@ -44,7 +54,7 @@ class AppStoreSource:
             backoff=1.5,
         )
         # Library support is probed once; the upstream token scrape is broken.
-        self._library_supported: bool | None = None
+        self._library_supported: bool | None = True if _LIB_AVAILABLE else False
 
     # -- discovery ---------------------------------------------------------
     def discover(
@@ -123,7 +133,7 @@ class AppStoreSource:
         return reviews
 
     def _reviews_via_library(self, app_id: str, count: int) -> list[dict]:
-        if self._library_supported is False:
+        if self._library_supported is False or AppStore is None:
             return []
         try:
             store = AppStore(

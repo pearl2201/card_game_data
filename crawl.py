@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import signal
 import sys
 
 from cardgame_market.config import (
@@ -60,6 +61,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="re-crawl records that were already stored")
     parser.add_argument("--no-cache", action="store_true",
                         help="bypass the on-disk response cache (implies fresh HTTP calls)")
+    parser.add_argument("--checkpoint-every", type=int, default=25,
+                        help="save progress to disk every N processed games (0 = only at the end)")
     parser.add_argument("--dry-run", action="store_true", help="crawl but do not write data/")
     return parser
 
@@ -67,7 +70,19 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stdout.reconfigure(line_buffering=True)
     args = build_parser().parse_args(argv)
+
+    # Treat SIGTERM (systemd stop, docker stop, `kill`) like Ctrl+C so the
+    # crawler still flushes its data on the way out.
+    def _on_sigterm(signum, frame):
+        raise KeyboardInterrupt
+
+    if hasattr(signal, "SIGTERM"):
+        try:
+            signal.signal(signal.SIGTERM, _on_sigterm)
+        except (ValueError, OSError):
+            pass
 
     sources = tuple(item.strip() for item in args.sources.split(",") if item.strip())
     unknown = set(sources) - {"steam", "google_play", "app_store"}
@@ -87,6 +102,7 @@ def main(argv: list[str] | None = None) -> int:
         itunes_limit=args.itunes_limit,
         reviews_per_game=args.reviews_per_game,
         review_games_limit=args.review_games,
+        checkpoint_every=args.checkpoint_every,
         require_multiplayer=args.require_multiplayer,
         min_relevance={**MIN_RELEVANCE, **({s: args.min_rating for s in sources} if args.min_rating is not None else {})},
         refresh=args.refresh,

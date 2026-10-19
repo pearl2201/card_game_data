@@ -1,0 +1,20 @@
+# Optional dependency.
+#
+# Install ONLY with --no-deps:
+#
+#     pip install --no-deps -r requirements-optional.txt
+#
+# app-store-scraper 0.3.5 pins requests==2.23.0 exactly (its only dependency),
+# so a normal `pip install` would downgrade requests/urllib3 across the whole
+# environment. --no-deps keeps the modern requests already installed by
+# requirements.txt, which the library is compatible with at runtime.
+#
+# Note: as of 2026 the library's review scraping is broken upstream because
+# Apple no longer serves the `web-experience-app` config block it reads its
+# bearer token from. The crawler detects this after one attempt and uses the
+# direct userReviewsRow endpoint instead, so this package is not required.
+#
+# `pip check` will report "app-store-scraper 0.3.5 has requirement
+# requests==2.23.0, but you have requests 2.34.2". That warning is expected:
+# the pin is over-strict, the library only uses basic requests APIs.
+app-store-scraper==0.3.5

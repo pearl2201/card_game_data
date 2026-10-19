@@ -11,12 +11,40 @@ direct storefront endpoints for data those libraries do not expose.
 
 ## Quick start
 
-```powershell
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 
 python crawl.py          # crawl all three storefronts
 python analyze.py        # export CSV + write reports
 ```
+
+On Windows use `.venv\Scripts\activate` instead of `source .venv/bin/activate`.
+
+### Why `app-store-scraper` is not in `requirements.txt`
+
+Version 0.3.5 pins `requests==2.23.0` **exactly**, so it can never resolve
+alongside the modern `requests` this project needs:
+
+```
+ERROR: Cannot install -r requirements.txt (line 2) and requests>=2.31
+  app-store-scraper 0.3.5 depends on requests==2.23.0
+```
+
+It is also non-functional upstream — Apple removed the `web-experience-app`
+config block the library scrapes its bearer token from, so it always returns
+zero reviews. The App Store crawler therefore talks to the iTunes Search API and
+Apple's `userReviewsRow` endpoint directly, which works.
+
+If you still want the package (e.g. to retry if Apple restores the endpoint):
+
+```bash
+pip install --no-deps -r requirements-optional.txt
+```
+
+`--no-deps` is required so it does not downgrade `requests`/`urllib3`. `pip check`
+will then warn about the version pin; that warning is harmless.
 
 Outputs:
 
@@ -31,6 +59,38 @@ Outputs:
 | `data/reports/market_report.md` | human-readable summary |
 
 ---
+
+## Running unattended with `screen`
+
+```bash
+cd ~/card_game_data
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+screen -S crawl                 # start a named session
+./run_crawl.sh --steam-enrich-limit 2000 --steam-budget 0
+#   or: python -u crawl.py --steam-enrich-limit 2000 --steam-budget 0
+# then detach:  Ctrl+A  then  D
+```
+
+Close the SSH connection. Later:
+
+```bash
+screen -ls                      # find the session
+screen -r crawl                 # reattach
+```
+
+Start it already detached, in one command:
+
+```bash
+screen -dmS crawl bash -c 'cd ~/card_game_data && ./run_crawl.sh --steam-enrich-limit 2000 --steam-budget 0'
+```
+
+Notes:
+
+* `python -u` (or `run_crawl.sh`, which uses it) keeps output unbuffered, otherwise the log stays empty until the buffer flushes.
+* If the crawl finishes while you are detached, the screen window closes and its output is gone. `run_crawl.sh` writes `logs/crawl-<timestamp>.log` so nothing is lost; bare `screen -L` writes `screenlog.0` instead.
+* Data is checkpointed every 25 games (`--checkpoint-every`), and SIGTERM/Ctrl+C still flushes everything, so killing the session mid-run keeps what was already crawled. Re-running resumes where it stopped.
 
 ## How discovery works
 
