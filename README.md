@@ -110,7 +110,8 @@ grep -n -A25 Traceback logs/crawl-*.log | tail -40
 ```
 
 Exit codes: `0` ok, `2` analysis failed, `3` wrong interpreter / missing
-dependencies, `130` interrupted (data is still valid — just re-run).
+dependencies, `4` another crawl already holds the lock, `130` interrupted (data is
+still valid — just re-run).
 
 The script picks its interpreter in this order: `$PYTHON`, then `.venv/bin/python`,
 then `python3` — skipping any candidate that cannot import the dependencies. If
@@ -130,6 +131,11 @@ PYTHON=python3 ./run_crawl.sh
 
 Notes:
 
+* **Only one crawl may run at a time.** A lock file (`data/raw/.crawl.lock`) is
+  taken on start and a second run exits with code `4`. Two crawls would corrupt
+  each other: `games.jsonl` is rewritten whole from memory, so the last writer
+  silently drops the other run's records. A lock left by a dead process is
+  reclaimed automatically; if a lock is stale after a reboot, delete it.
 * `python -u` (or `run_crawl.sh`, which uses it) keeps output unbuffered, otherwise the log stays empty until the buffer flushes.
 * If the crawl finishes while you are detached, the screen window closes and its output is gone. `run_crawl.sh` writes `logs/crawl-<timestamp>.log` so nothing is lost; bare `screen -L` writes `screenlog.0` instead.
 * Data is checkpointed every 25 games (`--checkpoint-every`), and SIGTERM/Ctrl+C still flushes everything, so killing the session mid-run keeps what was already crawled. Re-running resumes where it stopped.

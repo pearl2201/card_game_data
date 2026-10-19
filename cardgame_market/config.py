@@ -18,6 +18,7 @@ for _dir in (RAW_DIR, CACHE_DIR, PROCESSED_DIR, REPORTS_DIR):
 
 GAMES_STORE = RAW_DIR / "games.jsonl"
 REVIEWS_STORE = RAW_DIR / "reviews.jsonl"
+LOCK_FILE = RAW_DIR / ".crawl.lock"
 GAMES_CSV = PROCESSED_DIR / "games.csv"
 REVIEWS_CSV = PROCESSED_DIR / "reviews.csv"
 

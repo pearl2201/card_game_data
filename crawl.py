@@ -27,6 +27,7 @@ from cardgame_market.config import (
     STEAM_DISCOVERY_TAGS,
 )
 from cardgame_market.pipeline import CrawlOptions, run_crawl
+from cardgame_market.storage import CrawlAlreadyRunning
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -112,6 +113,16 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         stats = run_crawl(options)
+    except CrawlAlreadyRunning as exc:
+        print(
+            f"Another crawl is already running (pid {exc.pid}).\n"
+            f"Lock file: {exc.path}\n"
+            "Only one crawl may write to data/ at a time, otherwise records are lost.\n"
+            f"  - Check it:       ps -p {exc.pid}\n"
+            f"  - If it is dead:  rm {exc.path}",
+            file=sys.stderr,
+        )
+        return 4
     except KeyboardInterrupt:
         print("\nInterrupted — progress already written to data/raw/")
         return 130

@@ -12,6 +12,7 @@ from .config import (
     DEFAULT_PLAY_HITS,
     DEFAULT_REVIEWS_PER_GAME,
     GAMES_STORE,
+    LOCK_FILE,
     MIN_RELEVANCE,
     MOBILE_SEARCH_QUERIES,
     NON_GAME_GENRES,
@@ -23,7 +24,7 @@ from .normalize import clean_text
 from .sources.appstore import AppStoreSource
 from .sources.play import PlaySource
 from .sources.steam import SteamSource
-from .storage import RecordStore, ReviewStore
+from .storage import CrawlLock, RecordStore, ReviewStore
 
 
 @dataclass
@@ -89,6 +90,10 @@ class Crawler:
             reviews_path = Path(tempfile.gettempdir()) / "cardgame_market_dryrun_reviews.jsonl"
             reviews_path.unlink(missing_ok=True)
 
+        lock = None
+        if not self.options.dry_run:
+            lock = CrawlLock(LOCK_FILE)
+            lock.acquire()
         try:
             with ReviewStore(reviews_path) as review_store:
                 if self.steam:
@@ -102,9 +107,13 @@ class Crawler:
         finally:
             # Always persist what we have, including on Ctrl+C / SIGTERM.
             if not self.options.dry_run:
-                total = self.store.save()
-                print(f"\nSaved {total:,} games -> {GAMES_STORE}", flush=True)
-                print(f"Added {self.new_reviews:,} review samples -> {REVIEWS_STORE}", flush=True)
+                try:
+                    total = self.store.save()
+                    print(f"\nSaved {total:,} games -> {GAMES_STORE}", flush=True)
+                    print(f"Added {self.new_reviews:,} review samples -> {REVIEWS_STORE}", flush=True)
+                finally:
+                    if lock is not None:
+                        lock.release()
         return {
             "games": len(self.store),
             "new_games": self.new_records,
