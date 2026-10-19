@@ -64,12 +64,12 @@ Outputs:
 
 ```bash
 cd ~/card_game_data
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt     # install INTO .venv
+ls .venv/bin/python                            # confirm it exists
 
-screen -S crawl                 # start a named session
+screen -S crawl                                 # start a named session
 ./run_crawl.sh --steam-enrich-limit 2000 --steam-budget 0
-#   or: python -u crawl.py --steam-enrich-limit 2000 --steam-budget 0
 # then detach:  Ctrl+A  then  D
 ```
 
@@ -84,6 +84,27 @@ Start it already detached, in one command:
 
 ```bash
 screen -dmS crawl bash -c 'cd ~/card_game_data && ./run_crawl.sh --steam-enrich-limit 2000 --steam-budget 0'
+```
+
+### If it fails
+
+`run_crawl.sh` prints the last 30 log lines on failure, so the traceback appears
+in the screen window. To inspect a run after the fact:
+
+```bash
+tail -n 40 logs/crawl-*.log
+grep -n -A25 Traceback logs/crawl-*.log | tail -40
+```
+
+Exit codes: `0` ok, `2` analysis failed, `3` wrong interpreter / missing
+dependencies, `130` interrupted (data is still valid — just re-run).
+
+The script picks its interpreter in this order: `$PYTHON`, then `.venv/bin/python`,
+then `python3`. If the venv exists but is empty, you get exit `3` with the fix
+suggested. Force a specific one with:
+
+```bash
+PYTHON=/opt/venv/bin/python ./run_crawl.sh
 ```
 
 Notes:
