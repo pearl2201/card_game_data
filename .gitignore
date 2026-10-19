@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+
+# Crawled data stays local: it is large (38 MB+), changes on every crawl and
+# the HTTP cache is regenerable. Re-create it with `python crawl.py`.
+data/
